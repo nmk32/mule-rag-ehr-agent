@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:ms-aichain="http://www.mulesoft.org/schema/mule/ms-aichain"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ms-aichain http://www.mulesoft.org/schema/mule/ms-aichain/current/mule-ms-aichain.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<ms-aichain:config name="MuleSoft_AI_Chain_Config" llmType="OLLAMA" configType="Configuration Json" modelName="llama3.2:latest" doc:name="MuleSoft AI Chain Config" doc:id="7d601dca-d1e1-4d99-a7a7-75cf61154b43" filePath='#[mule.home ++ "/apps/" ++ app.name ++ "/llm-config.json"]' />
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="a65e9e23-b751-4caa-8a6b-b069777a6da8" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<flow name="rag-ehr-agent-provides-chat-interface" doc:id="db0134e0-4e9e-4b9c-8683-070911c5d901" >
+		<http:listener doc:name="Listener" doc:id="2ae0f7b8-16e1-4e1e-94ae-55031016423f" config-ref="HTTP_Listener_config" path="/chat"/>
+		<parse-template doc:name="Load Chat Interface" doc:id="3c47c082-a95f-44fa-b467-dbd0a46347ed" location="chat.html"/>
+	</flow>
+	<flow name="rag-ehr-agent-creates-inmemory-embedding" doc:id="4949668e-7f9e-497b-bc66-58b4d6ebc349" >
+		<http:listener doc:name="Listener" doc:id="d927a309-0bd4-4bda-b6d2-935b483e2ab3" config-ref="HTTP_Listener_config" path="/createEmbeddingStore"/>
+		<ms-aichain:embedding-new-store doc:name="Embedding new store" doc:id="8f840427-579f-4b43-9ae9-ff88201b70f8" storeName='#[mule.home ++ "/apps/" ++ app.name ++ "/orthodata"]'/>
+	</flow>
+	<flow name="rag-ehr-agent-adds-document-to-embedding-store" doc:id="5c834a5b-4fb8-4849-b074-13c2561734a3" >
+		<http:listener doc:name="Listener" doc:id="bf392aae-a4c6-493e-9fbe-1bc0e011c426" config-ref="HTTP_Listener_config" path="/embedfile"/>
+		<ms-aichain:embedding-add-document-to-store doc:name="Embedding add document to store" doc:id="72f1965c-3a66-4865-a716-4906f99b66c0" storeName='#[mule.home ++ "/apps/" ++ app.name ++ "/orthodata"]' contextPath="#[payload.file]" maxSegmentSizeInChars="1500" maxOverlapSizeInChars="150" fileType="any"/>
+		<logger level="INFO" doc:name="Logger" doc:id="5e1dad57-2f61-4dbe-9c68-c99bc7d81ebd" message="added document to store" />
+	</flow>
+	<flow name="rag-ehr-agent-getsinfo-from-embedding-store-with-llm" doc:id="761f99f3-8a2e-4be6-93a8-5a842de74114" >
+		<http:listener doc:name="Listener" doc:id="e18b1956-35a1-463b-b0ec-41ba061a6c83" config-ref="HTTP_Listener_config" path="/ragchat">
+			<http:response >
+				<http:headers ><![CDATA[#[output application/java
+---
+{
+                    'Access-Control-Allow-Origin': '*', 
+                    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept',
+                    'Access-Control-Allow-Credentials': 'true'
+                }]]]></http:headers>
+			</http:response>
+		</http:listener>
+		<set-payload value='#[%dw 2.0&#10;output application/json&#10;---&#10;read(payload,"application/json")]' doc:name="Read payload as a JSON" doc:id="f8dbae5e-c459-488c-a382-ef0f0d165f2d" />
+		<ms-aichain:embedding-get-info-from-store doc:name="Embedding get info from store" doc:id="55c0a832-97d4-4f5a-8f42-0efcce1f204a" config-ref="MuleSoft_AI_Chain_Config" storeName='#[mule.home ++ "/apps/" ++ app.name ++ "/orthodata"]' getLatest="true">
+			<ms-aichain:data ><![CDATA[#[payload.data]]]></ms-aichain:data>
+		</ms-aichain:embedding-get-info-from-store>
+		<set-payload value='#[%dw 2.0&#10;output application/json&#10;---&#10;read(payload.response,"text/plain")]' doc:name="Parse the response" doc:id="5b4b0006-b068-40ee-a302-4d26bb2b1122" />
+		<logger level="INFO" doc:name="Logger" doc:id="71b0ba49-338d-4297-8fdf-d9397fe27986" message="Retrieved info from embedding stores"/>
+	</flow>
+</mule>

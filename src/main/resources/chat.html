@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <title>Chat Interface</title>
+   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+   <style>
+   body {
+          font-family: Arial, sans-serif;
+          background-color: #f4f4f4;
+          margin: 0;
+          height: 100vh;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+      }
+      .title {
+          background-color: #007bff; /* Blue background for title */
+          color: white; /* White text color */
+          text-align: center; /* Center text */
+          padding: 10px; /* Padding for title */
+          font-size: 20px; /* Font size for title */
+          font-weight: bold; /* Bold text */
+      }
+      .log {
+          background-color: #e9ecef; /* Light gray for log background */
+          color: #333; /* Dark text color */
+          padding: 10px;
+          text-align: center; /* Center text */
+          font-weight: bold; /* Bold text */
+          border-bottom: 1px solid #ccc; /* Bottom border */
+      }
+      .log img {
+          max-width: 150px; /* Set a max width for the logo */
+          margin-bottom: 5px; /* Space between logo and text */
+      }
+      .chat-container {
+          width: 500px; /* Increased width */
+          height: 600px; /* Increased height */
+          border: 1px solid #ccc;
+          background: white;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+          border-radius: 8px; /* Rounded corners */
+      }
+      .messages {
+          flex: 1;
+          padding: 10px;
+          overflow-y: auto;
+          background-color: #f9f9f9; /* Light background for messages */
+      }
+      .message {
+          max-width: 80%; /* Limit width */
+          padding: 10px;
+          border-radius: 20px; /* Rounded corners for bubble effect */
+          margin: 5px 0;
+          position: relative; /* For pseudo-elements */
+          word-wrap: break-word; /* Break long words */
+      }
+      .user-message {
+          background-color: #d1e7dd; /* Light green for user messages */
+          color: #0f5132; /* Dark green text */
+          align-self: flex-end; /* Align user messages to the right */
+          margin-left: auto; /* Push user messages to the right */
+          text-align: end;
+      }
+      .bot-message {
+          background-color: #f8d7da; /* Light red for bot messages */
+          color: #721c24; /* Dark red text */
+          align-self: flex-start; /* Align bot messages to the left */
+          margin-right: auto; /* Push bot messages to the left */
+      }
+      .input-area {
+          display: flex;
+          border-top: 1px solid #ccc;
+          background-color: #fff; /* White background for input area */
+      }
+      .input-area input {
+          flex: 1;
+          padding: 10px;
+          border: none;
+          border-radius: 5px 0 0 5px; /* Rounded corners */
+          border: 1px solid #ccc; /* Border for input */
+          outline: none; /* Remove outline */
+      }
+      .input-area button {
+          padding: 10px;
+          border: none;
+          background-color: #007bff;
+          color: white;
+          cursor: pointer;
+          border-radius: 0 5px 5px 0; /* Rounded corners */
+          transition: background-color 0.3s; /* Smooth transition */
+      }
+      .input-area button:hover {
+          background-color: #0056b3; /* Darker blue on hover */
+      }
+      .note {
+          color: red;
+          font-size: 12px;
+          margin-top: 10px;
+          text-align: center; /* Center the note */
+      }
+
+   </style>
+</head>
+<body>
+<div class="chat-container">
+
+ <div class="title">Doctor's AID</div>
+   <div class="messages" id="messages"></div>
+   <div class="input-area">
+       <input type="text" id="userInput" placeholder="Type a message...">
+       <button onclick="sendMessage()">Send</button>
+   </div>
+</div>
+
+<script>
+   async function sendMessage() {
+       const input = document.getElementById('userInput');
+       const messages = document.getElementById('messages');
+       const messageText = input.value;
+
+       if (messageText.trim() !== '') {
+           // Display user's message
+           const userMessageElement = document.createElement('div');
+           userMessageElement.className = 'message user-message'; // Apply user message style
+           userMessageElement.textContent = `${messageText}`;
+           messages.appendChild(userMessageElement);
+            input.value = '';
+           // Send the message to the server
+           try {
+               const response = await fetch('http://localhost:8081/ragchat', {
+                   method: 'POST',
+                   headers: {
+                   },
+                   body: JSON.stringify({ data: messageText }) // Send data in the required format
+               });
+
+               const data = await response.json();
+
+               // Handle and display the parsed response
+               displayParsedResponse(data);
+           } catch (error) {
+               console.error('Error:', error);
+               const errorMessageElement = document.createElement('div');
+               errorMessageElement.textContent = 'Error: Unable to send message. Check CORS settings on the server.';
+               messages.appendChild(errorMessageElement);
+           }
+
+           input.value = '';
+           messages.scrollTop = messages.scrollHeight; // Scroll to the bottom
+       }
+   }
+
+   function displayParsedResponse(response) {
+       const messages = document.getElementById('messages');
+
+       // Assuming response is a string containing the markdown
+       const parsedResponse = parseMarkdown(response);
+
+       const botMessageElement = document.createElement('div');
+      botMessageElement.className = 'message bot-message';
+       botMessageElement.innerHTML = `<strong>DOC AID:</strong> ${parsedResponse}`; // Adding a name for the response
+      messages.appendChild(botMessageElement);
+   }
+
+   function parseMarkdown(markdown) {
+       // Simple markdown parsing to convert to HTML
+       return markdown
+           .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold
+           .replace(/\*(.*?)\*/g, '<em>$1</em>') // Italics
+           .replace(/\n/g, '<br>') // New lines
+           .replace(/- (.*?)(?=\n|$)/g, '<li>$1</li>') // List items
+           .replace(/<li>/g, '<ul><li>').replace(/<\/li>(?=<li>)/g, '</li></ul>'); // Wrap lists
+   }
+
+   // Add event listener for the Enter key
+  document.getElementById('userInput').addEventListener('keypress', function(event) {
+      if (event.key === 'Enter') {
+          sendMessage();
+          event.preventDefault(); // Prevent default action (form submission)
+      }
+  });
+</script>
+
+</body>
+</html>
